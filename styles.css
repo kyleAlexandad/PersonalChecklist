@@ -475,6 +475,39 @@ textarea:focus {
   box-shadow: var(--shadow);
 }
 
+.modal--wide {
+  max-width: min(100vw - 2rem, 520px);
+}
+
+.modal__hint {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.modal__hint code {
+  font-size: 0.85em;
+}
+
+.backup-textarea {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.paste-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--danger);
+  min-height: 0;
+}
+
+.paste-error:empty {
+  display: none;
+}
+
 .modal::backdrop {
   background: rgba(0, 0, 0, 0.45);
 }

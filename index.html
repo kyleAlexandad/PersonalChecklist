@@ -19,9 +19,11 @@
       </div>
       <div class="header__actions">
         <button type="button" class="btn btn--ghost" id="btnTheme" aria-label="Toggle dark mode" title="Theme"></button>
-        <button type="button" class="btn btn--ghost" id="btnExport" title="Download backup">Export</button>
-        <label class="btn btn--ghost btn--file">
-          Import
+        <button type="button" class="btn btn--ghost" id="btnCopyBackup" title="Copy backup as one line">Copy code</button>
+        <button type="button" class="btn btn--ghost" id="btnPasteBackup" title="Paste a backup code">Paste code</button>
+        <button type="button" class="btn btn--ghost" id="btnDownloadFile" title="Download a .json file">File ↓</button>
+        <label class="btn btn--ghost btn--file" title="Import from .json file">
+          File ↑
           <input type="file" id="importFile" accept="application/json,.json" hidden />
         </label>
       </div>
@@ -87,7 +89,7 @@
     <ul class="list" id="list" role="list"></ul>
 
     <footer class="footer">
-      <p>Data is saved in this browser (local storage). Use Export / Import to move your list between devices. Host this folder on GitHub Pages for a free public site.</p>
+      <p>Data is saved in this browser (local storage). Use <strong>Copy code</strong> / <strong>Paste code</strong> to move your list (chat, notes, email). Optional: File ↓ / File ↑ for JSON files. Host on GitHub Pages for a free public site.</p>
     </footer>
   </div>
 
@@ -113,6 +115,22 @@
       </div>
     </li>
   </template>
+
+  <dialog class="modal modal--wide" id="modalPaste" aria-labelledby="modalPasteTitle">
+    <div class="modal__form">
+      <h2 id="modalPasteTitle" class="modal__title">Paste backup code</h2>
+      <p class="modal__hint">Paste the full line (it starts with <code>CL1:</code>). You can also paste raw JSON from an old export.</p>
+      <label class="field field--block">
+        <span class="field__label">Backup</span>
+        <textarea id="pasteBackup" class="backup-textarea" rows="5" placeholder="CL1:…" spellcheck="false" autocomplete="off"></textarea>
+      </label>
+      <p class="paste-error" id="pasteError" role="alert"></p>
+      <div class="modal__buttons">
+        <button type="button" class="btn btn--ghost" id="pasteCancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="pasteSubmit">Import</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog class="modal" id="modalEdit" aria-labelledby="modalEditTitle">
     <form method="dialog" class="modal__form" id="formEdit">

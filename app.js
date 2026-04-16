@@ -1,4 +1,5 @@
 const STORAGE_KEY = "checklist-app-v1";
+const BACKUP_PREFIX = "CL1:";
 
 /** @typedef {{ id: string, title: string, dueDate: string | null, priority: 'low'|'medium'|'high', notes: string, completed: boolean, createdAt: string }} CheckItem */
 
@@ -38,6 +39,103 @@ function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ items: state.items }));
 }
 
+function encodeBackupCode() {
+  const payload = JSON.stringify({
+    v: 1,
+    exportedAt: new Date().toISOString(),
+    items: state.items,
+  });
+  const b64 = btoa(unescape(encodeURIComponent(payload)));
+  return BACKUP_PREFIX + b64;
+}
+
+/**
+ * @param {string} raw
+ * @returns {CheckItem[]}
+ */
+function decodeBackupText(raw) {
+  const t = raw.trim();
+  if (!t) throw new Error("Paste your backup code or JSON.");
+
+  if (t.startsWith("{")) {
+    const data = JSON.parse(t);
+    if (!Array.isArray(data.items)) throw new Error('JSON must contain an "items" array.');
+    return data.items;
+  }
+
+  const compact = t.replace(/\s+/g, "");
+  if (!compact.startsWith(BACKUP_PREFIX)) {
+    throw new Error('Backup must start with CL1: or be JSON ({ "items": [...] }).');
+  }
+  const b64 = compact.slice(BACKUP_PREFIX.length);
+  const json = decodeURIComponent(escape(atob(b64)));
+  const data = JSON.parse(json);
+  if (!data || !Array.isArray(data.items)) throw new Error("Invalid backup data.");
+  return data.items;
+}
+
+/** @param {Partial<CheckItem>[]} rawItems */
+function applyImportedItems(rawItems) {
+  const incoming = rawItems.map((x) => normalizeItem(x));
+  if (incoming.length === 0) {
+    alert("No items found.");
+    return;
+  }
+  const merged = confirm(
+    "Merge imported items with your current list? Cancel replaces the entire list."
+  );
+  if (merged) {
+    const ids = new Set(state.items.map((i) => i.id));
+    for (const it of incoming) {
+      if (ids.has(it.id)) it.id = uid();
+      state.items.push(it);
+    }
+  } else {
+    state.items = incoming;
+  }
+  persist();
+}
+
+function flashButtonLabel(btn, label, ms = 2000) {
+  const prev = btn.textContent;
+  btn.textContent = label;
+  window.setTimeout(() => {
+    btn.textContent = prev;
+  }, ms);
+}
+
+async function copyBackupToClipboard() {
+  const text = encodeBackupCode();
+  try {
+    await navigator.clipboard.writeText(text);
+    flashButtonLabel(els.btnCopyBackup, "Copied!");
+    return;
+  } catch (_) {
+    /* try fallback */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) {
+      flashButtonLabel(els.btnCopyBackup, "Copied!");
+      return;
+    }
+  } catch (_) {
+    /* show manual copy */
+  }
+  els.pasteBackup.value = text;
+  els.pasteError.textContent = "Clipboard blocked — copy the text below, then close.";
+  els.modalPaste.showModal();
+  els.pasteBackup.select();
+}
+
 const priorityOrder = { high: 0, medium: 1, low: 2 };
 
 const els = {
@@ -52,8 +150,15 @@ const els = {
   stats: document.getElementById("stats"),
   tplItem: document.getElementById("tplItem"),
   btnTheme: document.getElementById("btnTheme"),
-  btnExport: document.getElementById("btnExport"),
+  btnCopyBackup: document.getElementById("btnCopyBackup"),
+  btnPasteBackup: document.getElementById("btnPasteBackup"),
+  btnDownloadFile: document.getElementById("btnDownloadFile"),
   importFile: document.getElementById("importFile"),
+  modalPaste: document.getElementById("modalPaste"),
+  pasteBackup: document.getElementById("pasteBackup"),
+  pasteError: document.getElementById("pasteError"),
+  pasteCancel: document.getElementById("pasteCancel"),
+  pasteSubmit: document.getElementById("pasteSubmit"),
   modalEdit: document.getElementById("modalEdit"),
   formEdit: document.getElementById("formEdit"),
   editId: document.getElementById("editId"),
@@ -328,7 +433,31 @@ els.btnTheme.addEventListener("click", () => {
   applyTheme(cur === "dark" ? "light" : "dark");
 });
 
-els.btnExport.addEventListener("click", () => {
+els.btnCopyBackup.addEventListener("click", () => {
+  void copyBackupToClipboard();
+});
+
+els.btnPasteBackup.addEventListener("click", () => {
+  els.pasteBackup.value = "";
+  els.pasteError.textContent = "";
+  els.modalPaste.showModal();
+  els.pasteBackup.focus();
+});
+
+els.pasteCancel.addEventListener("click", () => els.modalPaste.close());
+
+els.pasteSubmit.addEventListener("click", () => {
+  els.pasteError.textContent = "";
+  try {
+    const items = decodeBackupText(els.pasteBackup.value);
+    applyImportedItems(items);
+    els.modalPaste.close();
+  } catch (e) {
+    els.pasteError.textContent = e instanceof Error ? e.message : String(e);
+  }
+});
+
+els.btnDownloadFile.addEventListener("click", () => {
   const blob = new Blob([JSON.stringify({ items: state.items, exportedAt: new Date().toISOString() }, null, 2)], {
     type: "application/json",
   });
@@ -347,26 +476,9 @@ els.importFile.addEventListener("change", async () => {
     const text = await file.text();
     const data = JSON.parse(text);
     const incoming = Array.isArray(data.items) ? data.items : [];
-    if (incoming.length === 0) {
-      alert("No items found in file.");
-      return;
-    }
-    const merged = confirm(
-      "Merge imported items with your current list? Cancel replaces the entire list."
-    );
-    const normalized = incoming.map((x) => normalizeItem(x));
-    if (merged) {
-      const ids = new Set(state.items.map((i) => i.id));
-      for (const it of normalized) {
-        if (ids.has(it.id)) it.id = uid();
-        state.items.push(it);
-      }
-    } else {
-      state.items = normalized;
-    }
-    persist();
+    applyImportedItems(incoming);
   } catch {
-    alert("Could not read that file. Use a JSON export from this app.");
+    alert("Could not read that file. Use a JSON export from this app or a CL1: backup code.");
   }
 });
 
