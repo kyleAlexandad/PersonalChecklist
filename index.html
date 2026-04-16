@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Personal checklist — dates, priorities, and notes in one calm view." />
+  <title>Checklist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="header">
+      <div class="header__brand">
+        <h1 class="header__title">Checklist</h1>
+        <p class="header__subtitle">Your tasks, dates, and priorities in one place.</p>
+      </div>
+      <div class="header__actions">
+        <button type="button" class="btn btn--ghost" id="btnTheme" aria-label="Toggle dark mode" title="Theme"></button>
+        <button type="button" class="btn btn--ghost" id="btnExport" title="Download backup">Export</button>
+        <label class="btn btn--ghost btn--file">
+          Import
+          <input type="file" id="importFile" accept="application/json,.json" hidden />
+        </label>
+      </div>
+    </header>
+
+    <section class="panel panel--compose" aria-labelledby="compose-heading">
+      <h2 id="compose-heading" class="visually-hidden">Add item</h2>
+      <form class="compose" id="formAdd" autocomplete="off">
+        <div class="compose__row compose__row--main">
+          <label class="field field--grow">
+            <span class="field__label">Item</span>
+            <input type="text" id="inputTitle" name="title" placeholder="What needs doing?" required maxlength="500" />
+          </label>
+          <label class="field">
+            <span class="field__label">Due date</span>
+            <input type="date" id="inputDue" name="dueDate" />
+          </label>
+          <label class="field">
+            <span class="field__label">Priority</span>
+            <select id="inputPriority" name="priority">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+        </div>
+        <label class="field field--block">
+          <span class="field__label">Notes <span class="field__optional">(optional)</span></span>
+          <textarea id="inputNotes" name="notes" rows="2" placeholder="Context, links, or subtasks…" maxlength="2000"></textarea>
+        </label>
+        <div class="compose__actions">
+          <button type="submit" class="btn btn--primary">Add to list</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="toolbar" aria-label="Filters and search">
+      <div class="toolbar__search">
+        <label class="search">
+          <span class="visually-hidden">Search</span>
+          <input type="search" id="inputSearch" placeholder="Search items and notes…" autocomplete="off" />
+        </label>
+      </div>
+      <div class="toolbar__filters">
+        <div class="segmented" role="group" aria-label="Filter by status">
+          <button type="button" class="segmented__btn is-active" data-filter="all">All</button>
+          <button type="button" class="segmented__btn" data-filter="active">Active</button>
+          <button type="button" class="segmented__btn" data-filter="done">Done</button>
+        </div>
+        <label class="field field--inline">
+          <span class="field__label">Sort</span>
+          <select id="inputSort">
+            <option value="due">Due date</option>
+            <option value="priority">Priority</option>
+            <option value="created">Added</option>
+            <option value="title">Title</option>
+          </select>
+        </label>
+      </div>
+      <p class="toolbar__stats" id="stats" aria-live="polite"></p>
+    </section>
+
+    <ul class="list" id="list" role="list"></ul>
+
+    <footer class="footer">
+      <p>Data is saved in this browser (local storage). Use Export / Import to move your list between devices. Host this folder on GitHub Pages for a free public site.</p>
+    </footer>
+  </div>
+
+  <template id="tplItem">
+    <li class="item" data-id="">
+      <div class="item__check">
+        <input type="checkbox" class="item__checkbox" aria-label="Mark complete" />
+      </div>
+      <div class="item__body">
+        <div class="item__top">
+          <span class="item__priority" data-priority></span>
+          <time class="item__date" datetime=""></time>
+        </div>
+        <p class="item__title"></p>
+        <p class="item__notes"></p>
+        <div class="item__meta">
+          <span class="item__created"></span>
+        </div>
+      </div>
+      <div class="item__actions">
+        <button type="button" class="btn btn--icon" data-action="edit" title="Edit">✎</button>
+        <button type="button" class="btn btn--icon btn--danger" data-action="delete" title="Delete">×</button>
+      </div>
+    </li>
+  </template>
+
+  <dialog class="modal" id="modalEdit" aria-labelledby="modalEditTitle">
+    <form method="dialog" class="modal__form" id="formEdit">
+      <h2 id="modalEditTitle" class="modal__title">Edit item</h2>
+      <input type="hidden" id="editId" />
+      <label class="field field--block">
+        <span class="field__label">Item</span>
+        <input type="text" id="editTitle" required maxlength="500" />
+      </label>
+      <label class="field">
+        <span class="field__label">Due date</span>
+        <input type="date" id="editDue" />
+      </label>
+      <label class="field">
+        <span class="field__label">Priority</span>
+        <select id="editPriority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+      <label class="field field--block">
+        <span class="field__label">Notes</span>
+        <textarea id="editNotes" rows="3" maxlength="2000"></textarea>
+      </label>
+      <label class="field field--row">
+        <input type="checkbox" id="editDone" />
+        <span>Completed</span>
+      </label>
+      <div class="modal__buttons">
+        <button type="button" class="btn btn--ghost" id="editCancel" value="cancel">Cancel</button>
+        <button type="submit" class="btn btn--primary" value="default">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
