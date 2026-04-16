@@ -49,28 +49,56 @@ function encodeBackupCode() {
   return BACKUP_PREFIX + b64;
 }
 
+function stripInvisible(s) {
+  return String(s).replace(/\u200b|\ufeff/g, "");
+}
+
+/** @param {string} b64 */
+function padBase64(b64) {
+  const pad = b64.length % 4;
+  if (pad === 0) return b64;
+  return b64 + "=".repeat(4 - pad);
+}
+
 /**
  * @param {string} raw
  * @returns {CheckItem[]}
  */
 function decodeBackupText(raw) {
-  const t = raw.trim();
-  if (!t) throw new Error("Paste your backup code or JSON.");
+  const trimmed = stripInvisible(raw).trim();
+  if (!trimmed) throw new Error("Paste your backup code or JSON.");
 
-  if (t.startsWith("{")) {
-    const data = JSON.parse(t);
+  if (trimmed.startsWith("{")) {
+    const data = JSON.parse(trimmed);
     if (!Array.isArray(data.items)) throw new Error('JSON must contain an "items" array.');
     return data.items;
   }
 
-  const compact = t.replace(/\s+/g, "");
+  let compact = stripInvisible(raw)
+    .replace(/\s+/g, "")
+    .replace(/：/g, ":");
   if (!compact.startsWith(BACKUP_PREFIX)) {
-    throw new Error('Backup must start with CL1: or be JSON ({ "items": [...] }).');
+    throw new Error(
+      'Backup must start with CL1: (use a normal colon ":") or paste JSON starting with {.'
+    );
   }
-  const b64 = compact.slice(BACKUP_PREFIX.length);
-  const json = decodeURIComponent(escape(atob(b64)));
-  const data = JSON.parse(json);
-  if (!data || !Array.isArray(data.items)) throw new Error("Invalid backup data.");
+  let b64 = compact.slice(BACKUP_PREFIX.length);
+  b64 = padBase64(b64);
+  let json;
+  try {
+    json = decodeURIComponent(escape(atob(b64)));
+  } catch {
+    throw new Error(
+      "Could not decode this backup. Copy the full line after CL1: with nothing missing, or use File ↓ / File ↑."
+    );
+  }
+  let data;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    throw new Error("Decoded backup was not valid JSON.");
+  }
+  if (!data || !Array.isArray(data.items)) throw new Error("Invalid backup data (missing items array).");
   return data.items;
 }
 
@@ -78,7 +106,9 @@ function decodeBackupText(raw) {
 function applyImportedItems(rawItems) {
   const incoming = rawItems.map((x) => normalizeItem(x));
   if (incoming.length === 0) {
-    alert("No items found.");
+    if (!confirm("This backup has no tasks. Replace your list with an empty list?")) return;
+    state.items = [];
+    persist();
     return;
   }
   const merged = confirm(
@@ -106,33 +136,44 @@ function flashButtonLabel(btn, label, ms = 2000) {
 
 async function copyBackupToClipboard() {
   const text = encodeBackupCode();
-  try {
-    await navigator.clipboard.writeText(text);
-    flashButtonLabel(els.btnCopyBackup, "Copied!");
-    return;
-  } catch (_) {
-    /* try fallback */
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    if (ok) {
+  const tryExecCommandCopy = () => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
       flashButtonLabel(els.btnCopyBackup, "Copied!");
       return;
+    } catch (err) {
+      console.warn(err);
     }
-  } catch (_) {
-    /* show manual copy */
   }
+
+  if (tryExecCommandCopy()) {
+    flashButtonLabel(els.btnCopyBackup, "Copied!");
+    return;
+  }
+
   els.pasteBackup.value = text;
-  els.pasteError.textContent = "Clipboard blocked — copy the text below, then close.";
+  els.pasteError.textContent =
+    "Select the text below and copy (Ctrl+C). Clipboard API needs HTTPS or permission.";
   els.modalPaste.showModal();
+  els.pasteBackup.focus();
   els.pasteBackup.select();
 }
 
@@ -176,18 +217,27 @@ let searchQuery = "";
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  localStorage.setItem("checklist-theme", theme);
-  els.btnTheme.textContent = theme === "dark" ? "Light" : "Dark";
+  try {
+    localStorage.setItem("checklist-theme", theme);
+  } catch (_) {
+    /* private mode or quota */
+  }
+  const label = theme === "dark" ? "Light" : "Dark";
+  if (els.btnTheme) els.btnTheme.textContent = label;
 }
 
 function initTheme() {
-  const stored = localStorage.getItem("checklist-theme");
-  if (stored === "dark" || stored === "light") {
-    applyTheme(stored);
-    return;
+  try {
+    const stored = localStorage.getItem("checklist-theme");
+    if (stored === "dark" || stored === "light") {
+      applyTheme(stored);
+      return;
+    }
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(prefersDark ? "dark" : "light");
+  } catch (_) {
+    applyTheme("light");
   }
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  applyTheme(prefersDark ? "dark" : "light");
 }
 
 /** @param {CheckItem[]} items */
@@ -328,6 +378,9 @@ function persist() {
   saveState(state);
   render();
 }
+
+initTheme();
+render();
 
 els.formAdd.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -481,6 +534,3 @@ els.importFile.addEventListener("change", async () => {
     alert("Could not read that file. Use a JSON export from this app or a CL1: backup code.");
   }
 });
-
-initTheme();
-render();

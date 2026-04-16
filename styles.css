@@ -89,6 +89,15 @@ body {
   align-items: center;
 }
 
+.header__actions > .btn,
+.header__actions > .btn--file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.25rem;
+  min-height: 2.25rem;
+}
+
 .btn {
   font-family: inherit;
   font-size: 0.875rem;
